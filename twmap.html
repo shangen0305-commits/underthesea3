@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Choropleth Tutorial - Leaflet</title>
+    <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        .leaflet-container {
+            height: 100%;
+            width: 100%;
+            max-width: 100%;
+            max-height: 100%;
+            background-color: #e5eeee;
+        }
+    </style>
+
+    <style>
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255,255,255,0.8);
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 5px;
+        }
+
+        .info h4 {
+            margin: 0 0 5px;
+            color: #777;
+        }
+
+        .legend {
+            text-align: left;
+            line-height: 18px;
+            color: #555;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+
+        /* ===== 縣市照片彈出視窗 ===== */
+        .county-photo-tooltip {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        .county-photo-tooltip::before {
+            display: none;
+        }
+
+        .county-photo-card {
+            width: 220px;
+            overflow: hidden;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+            font-family: Arial, "Microsoft JhengHei", sans-serif;
+        }
+
+        /* 整張卡片都可以點擊 */
+        .county-photo-link {
+            display: block;
+            color: inherit;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .county-photo-link:hover {
+            text-decoration: none;
+        }
+
+        .county-photo-card img {
+            display: block;
+            width: 100%;
+            height: 135px;
+            object-fit: cover;
+            transition: transform 0.25s ease;
+        }
+
+        .county-photo-link:hover img {
+            transform: scale(1.04);
+        }
+
+        .county-photo-title {
+            padding: 10px 12px 3px;
+            font-size: 17px;
+            font-weight: bold;
+            color: #1d5963;
+        }
+
+        .county-photo-subtitle {
+            padding: 0 12px 12px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #555555;
+        }
+    </style>
+</head>
+
+<body>
+<div id="map"></div>
+
+<script type="text/javascript" src="twCounty2010.geo.json"></script>
+
+<script type="text/javascript">
+
+// ===== 地圖基礎設定：保留原本設定 =====
+const map = L.map('map', {
+    zoomControl: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    touchZoom: false,
+    dragging: false,
+    keyboard: false,
+    maxBounds: [
+        [21.5, 119.0],
+        [25.5, 123.5]
+    ],
+    maxBoundsViscosity: 1.0
+}).setView([24.10, 122], 9);
+
+
+// ===== 原本的縣市資訊控制 =====
+const info = L.control();
+
+info.onAdd = function (map) {
+    this._div = L.DomUtil.create('div', 'info');
+    this.update();
+    return this._div;
+};
+
+info.update = function (props) {
+    const contents = props ? `<b>${props.name}</b>` : '選取一個城市';
+    this._div.innerHTML = `<h4>Taiwan</h4>${contents}`;
+    this._div.innerHTML = '';
+};
+
+//info.addTo(map);
+
+
+// ===== 原本的地圖顏色設定 =====
+function getColor(d) {
+    return d > 1000 ? '#003377' :
+        d > 500  ? '#003377' :
+        d > 200  ? '#003377' :
+        d > 100  ? '#003377' :
+        d > 50   ? '#003377' :
+        d > 20   ? '#003377' :
+        d > 10   ? '#003377' : '#444444';
+}
+
+
+// ===== 原本的縣市外觀設定 =====
+function style(feature) {
+    return {
+        weight: 2,
+        opacity: 1,
+        color: 'white',
+        dashArray: '3',
+        fillOpacity: 0.7,
+        fillColor: getColor(feature.properties.density)
+    };
+}
+
+
+// ===== 四個縣市的照片與文章連結 =====
+const countyPhotos = {
+    '宜蘭縣': {
+        image: 'images/yilan.jpg',
+        subtitle: '宜蘭湧泉養出的香魚產業',
+        link: 'article5.html'
+    },
+
+    '彰化縣': {
+        image: '黑蜆照.jpg',
+        subtitle: '彰化貝類養殖漁業',
+        link: 'article3.html'
+    },
+
+    '雲林縣': {
+        image: '烏魚冰淇淋.jpg',
+        subtitle: '雲林口湖烏魚養殖產業',
+        link: 'article2.html'
+    },
+
+    '嘉義縣': {
+        image: '白蝦.jpg',
+        subtitle: '嘉義智慧養殖白蝦',
+        link: 'article4.html'
+    }
+};
+
+
+// ===== 統一縣市名稱，避免「台」與「臺」不同 =====
+function normalizeCountyName(name) {
+    return String(name || '').replace(/台/g, '臺').trim();
+}
+
+
+// ===== 滑鼠移入縣市時的效果 =====
+function highlightFeature(e) {
+    const layer = e.target;
+
+    layer.setStyle({
+        weight: 5,
+        color: '#00008B',
+        dashArray: '',
+        fillOpacity: 0.7
+    });
+
+    layer.bringToFront();
+    info.update(layer.feature.properties);
+
+    // 顯示該縣市的照片視窗
+    layer.openTooltip();
+}
+
+
+/* global statesData */
+
+// ===== 載入原本的台灣縣市地圖 =====
+const geojson = L.geoJson(statesData, {
+    style,
+    onEachFeature
+}).addTo(map);
+
+
+// ===== 滑鼠移出縣市時，恢復原本樣式 =====
+function resetHighlight(e) {
+    geojson.resetStyle(e.target);
+    info.update();
+    e.target.closeTooltip();
+}
+
+
+// ===== 保留原本的地圖縮放函式 =====
+function zoomToFeature(e) {
+    map.fitBounds(e.target.getBounds());
+}
+
+
+// ===== 縣市互動與照片連結 =====
+function onEachFeature(feature, layer) {
+    const countyName = normalizeCountyName(
+        feature.properties.name
+    );
+
+    const photo = countyPhotos[countyName];
+
+    // 只有宜蘭、彰化、雲林、嘉義四個縣市會啟用照片功能
+    if (photo) {
+
+        // 照片、縣市名稱、說明文字都可以點擊
+        const tooltipContent = `
+            <div class="county-photo-card">
+                <a
+                    href="${photo.link}"
+                    target="_top"
+                    class="county-photo-link"
+                    aria-label="前往${countyName}相關文章"
+                >
+                    <img
+                        src="${photo.image}"
+                        alt="${countyName}漁業照片"
+                    >
+
+                    <div class="county-photo-title">
+                        ${countyName}
+                    </div>
+
+                    <div class="county-photo-subtitle">
+                        ${photo.subtitle}
+                    </div>
+                </a>
+            </div>
+        `;
+
+        layer.bindTooltip(tooltipContent, {
+            direction: 'auto',
+            offset: [12, 0],
+            opacity: 1,
+            sticky: false,
+            className: 'county-photo-tooltip',
+            interactive: true
+        });
+
+        // 只有這四個縣市有滑鼠移入、移出效果
+        layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight
+        });
+    }
+}
+
+
+// ===== 原本的圖例設定 =====
+const legend = L.control({position: 'bottomright'});
+
+legend.onAdd = function (map) {
+    const div = L.DomUtil.create('div', 'info legend');
+    const grades = [0, 10, 20, 50, 100, 200, 500, 1000];
+    const labels = [];
+    let from, to;
+
+    for (let i = 0; i < grades.length; i++) {
+        from = grades[i];
+        to = grades[i + 1];
+
+        labels.push(
+            `<i style="background:${getColor(from + 1)}"></i> ${from}${to ? `&ndash;${to}` : '+'}`
+        );
+    }
+
+    div.innerHTML = labels.join('<br>');
+    return div;
+};
+
+</script>
+</body>
+</html>
